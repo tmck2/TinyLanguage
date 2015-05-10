@@ -32,5 +32,33 @@ type private ParseState = {
 let private error (state : ParseState, message: string): ParseState =
     { state with Expressions = state.Expressions @ [ Error message ] }
 
+let rec private parseExpression(state: ParseState) : ParseState =
+    match state.Remaining with
+    | LeftParenthesis :: Identifier name :: rest -> parseInvoke(name, { state with Remaining = rest })
+    | LeftParenthesis :: wrong -> error(state, sprintf "%A cannot follow '('." wrong)
+    | RightParenthesis :: _ -> error(state, "Unmatched ')'.")
+    | Identifier name :: _ -> error(state, sprintf "Unexpected %s." name)
+    | LiteralInt i :: rest -> { state with Expressions = state.Expressions @ [ ConstantInt i ]}
+    | Unrecognized c :: _ -> error(state, sprintf "Unrecognized character %c" c)
+    | [] -> state
+and private parseInvoke(name: string, state: ParseState) =
+    let arguments = parseArguments { state with Expressions = [] }
+    match parseOperation name with
+    | Some operator -> 
+        let result = Invoke(Builtin operator, arguments.Expressions)
+        { state with Expressions = state.Expressions @ [ result ]}
+    | None -> error(state, sprintf "Unknown function '%s'." name)
+and private parseArguments(state: ParseState) : ParseState =
+    match state.Remaining with
+    | [] -> error(state, "')' expected.")
+    | RightParenthesis :: rest -> { state with Remaining = rest }
+    | _ -> parseArguments (parseExpression state)
+
+let rec private parseExpressions(state: ParseState) : ParseState =
+    let parsed = parseExpression state
+    match parsed.Remaining with
+    | [] -> parsed
+    | _ -> parseExpressions parsed
+
 let parse (lexemes: Lexeme list): Expression list=
     []
