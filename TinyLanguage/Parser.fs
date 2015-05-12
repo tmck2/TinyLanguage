@@ -7,16 +7,33 @@ let private parseOperation = function
 | "+" -> Some Plus
 | "-" -> Some Minus
 | "*" -> Some Times
-| _   -> None 
+| _   -> None
+let private prettyPrintOperation = function
+| Plus -> "+"
+| Minus -> "-"
+| Times -> "*"
 
 type Function =
     | Builtin of Operation
+let private prettyPrintFunction = function
+| Builtin operation -> prettyPrintOperation operation
 
 type Expression = 
     | ConstantInt of int
     | Defun       of string   * Expression list
     | Invoke      of Function * Expression list
     | Error       of string
+
+let rec prettyPrint = function
+| ConstantInt number -> number.ToString(System.Globalization.CultureInfo.InvariantCulture)
+| Defun (name, body) ->
+    let bodyExpressions = body |> List.map prettyPrint |> String.concat " "
+    sprintf "(defun %s %s)" name bodyExpressions
+| Invoke (f, arguments) ->
+    let name = prettyPrintFunction f
+    let argumentExpressions = arguments |> List.map prettyPrint |> String.concat " "
+    sprintf "(%s %s)" name argumentExpressions
+| Error message -> message
 
 let rec findAllErrors = function
 | Defun       (_, expressions) -> expressions |> List.collect findAllErrors
@@ -34,31 +51,36 @@ let private error (state : ParseState, message: string): ParseState =
 
 let rec private parseExpression(state: ParseState) : ParseState =
     match state.Remaining with
-    | LeftParenthesis :: Identifier name :: rest -> parseInvoke(name, { state with Remaining = rest })
-    | LeftParenthesis :: wrong -> error(state, sprintf "%A cannot follow '('." wrong)
-    | RightParenthesis :: _ -> error(state, "Unmatched ')'.")
-    | Identifier name :: _ -> error(state, sprintf "Unexpected %s." name)
-    | LiteralInt i :: rest -> { state with Expressions = state.Expressions @ [ ConstantInt i ]}
-    | Unrecognized c :: _ -> error(state, sprintf "Unrecognized character %c" c)
+    | LeftParenthesis     :: Identifier name    :: argumentsAndBody -> 
+        let invoke = parseInvoke (name, { state with Remaining = argumentsAndBody })
+        match invoke.Remaining with
+        | RightParenthesis :: remaining -> { invoke with Remaining = remaining }
+        | []                            -> error (invoke, "Expected ')'.") 
+        | wrong :: _                    -> error (state, sprintf "Expected ')'; found %A." wrong) 
+    | LeftParenthesis     :: wrong -> error (state, sprintf "%A cannot follow '('." wrong) 
+    | RightParenthesis    :: _     -> error (state, "Unmatched )")
+    | Identifier   name   :: _     -> error (state, sprintf "Unrecognized identifier '%s'." name) 
+    | LiteralInt   number :: rest  ->  
+        { Expressions = state.Expressions @ [ ConstantInt number ]; Remaining = rest }
+    | Unrecognized char   :: _    -> error (state, sprintf "Unexpected character %A" char )
     | [] -> state
 and private parseInvoke(name: string, state: ParseState) =
     let arguments = parseArguments { state with Expressions = [] }
     match parseOperation name with
-    | Some operator -> 
-        let result = Invoke(Builtin operator, arguments.Expressions)
-        { state with Expressions = state.Expressions @ [ result ]}
-    | None -> error(state, sprintf "Unknown function '%s'." name)
-and private parseArguments(state: ParseState) : ParseState =
-    match state.Remaining with
-    | [] -> error(state, "')' expected.")
-    | RightParenthesis :: rest -> { state with Remaining = rest }
+    | Some operation -> 
+        { Expressions = state.Expressions @ [ Invoke(Builtin operation, arguments.Expressions) ]; Remaining = arguments.Remaining }
+    | None -> error (state, sprintf "Unknown function '%s'." name) 
+and private parseArguments (state : ParseState) : ParseState =
+    match state.Remaining with 
+    | [] -> state // will be converted to error by parseExpression
+    | RightParenthesis :: rest -> state
     | _ -> parseArguments (parseExpression state)
 
 let rec private parseExpressions(state: ParseState) : ParseState =
     let parsed = parseExpression state
     match parsed.Remaining with
     | [] -> parsed
-    | _ -> parseExpressions parsed
+    | _  -> parseExpressions parsed
 
 let parse (lexemes: Lexeme list): Expression list=
     []
