@@ -24,16 +24,14 @@ type ParserGenerators =
             override x.Generator = expr
             override x.Shrinker t = Seq.empty }
 
-//[<TestFixtureSetUp>]
+[<TestFixtureSetUp>]
 let setup() = 
     Arb.register<ParserGenerators>() |> ignore
 
-//[<Property>]
-let ``parse of prettyPrint is original`` () = 
-    let property expression = 
-        let parsed = 
-            Parser.prettyPrint expression
-            |> Lexer.lex
-            |> Parser.parse
-        true // parsed = Parser.ensureHasMainFunction [ expression ]
-    Check.QuickThrowOnFailure property
+[<Property>]
+let ``parse of prettyPrint is original`` (expression: Expression) = 
+    let parsed = 
+        Parser.prettyPrint expression
+        |> Lexer.lex
+        |> Parser.parse
+    parsed = Parser.ensureHasMainFunction [ expression ]

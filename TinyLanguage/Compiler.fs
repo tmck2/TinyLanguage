@@ -12,5 +12,5 @@ let rec private allErrors = function
 let compile =
     Lexer.lex
         >> Parser.parse
-        >> IlGenerator.codegenDefuns
+        >> IlGenerator.codegen
         >> Railway.map Il.toAssemblyBuilder

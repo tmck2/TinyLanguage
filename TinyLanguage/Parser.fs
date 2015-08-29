@@ -82,5 +82,17 @@ let rec private parseExpressions(state: ParseState) : ParseState =
     | [] -> parsed
     | _  -> parseExpressions parsed
 
+let rec private containsMain = function
+| [] -> false
+| Defun("main", _) :: _ -> true
+| _ :: rest -> containsMain rest
+
+let ensureHasMainFunction = function
+| [] -> []
+| expressions when containsMain expressions -> expressions
+| [ expression ] -> [ Defun("main", [ expression ]) ]
+| expressions -> expressions @ [ Error "No main function found" ]
+
 let parse (lexemes: Lexeme list): Expression list=
-    []
+    let parsed = parseExpressions { Expressions = []; Remaining = lexemes }
+    parsed.Expressions |> ensureHasMainFunction
